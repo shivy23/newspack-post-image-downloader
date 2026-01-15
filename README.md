@@ -62,6 +62,7 @@ wp newspack-post-image-downloader download-images \
 - `--default-host-and-schema` Required for root-relative (`/path/img.jpg`) and protocol-relative (`//host/img.jpg`) URLs. Can skip these with `--do-not-download-root-relative-urls` or `--do-not-download-protocol-relative-urls`
 - `--do-not-download-large-sizes` Use when source is a non-WordPress site (skips attempting to find/download the original full-size image from intermediate/scaled versions)
 - `--dry-run` Preview what would be downloaded before executing
+- `--no-replace` Download/import files but leave post content URLs unchanged (default is to replace; `--no-replace` disables it)
 
 **WordPress image size handling:** The plugin automatically attempts to import the largest available image size into the Media Library (e.g. `img-puppy.jpg` instead of `img-puppy-300x244.jpg`, or `img-kitten.jpg` instead of `img-kitten-scaled.jpg`), while also downloading intermediate sizes alongside it.
 
@@ -85,6 +86,8 @@ wp newspack-post-image-downloader download-non-images-files \
   --default-host-and-schema=https://www.example.com \
   --extensions=pdf,m4a,mp4
 ```
+
+Use `--no-replace` to import files without changing URLs in post content.
 
 ---
 

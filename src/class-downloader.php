@@ -178,6 +178,13 @@ class Downloader {
 						'repeating'   => false,
 					],
 					[
+						'type'        => 'flag',
+						'name'        => 'replace',
+						'description' => 'Replace URLs in post content (use --no-replace to skip replacements).',
+						'optional'    => true,
+						'repeating'   => false,
+					],
+					[
 						'type'        => 'assoc',
 						'name'        => 'exclude-hosts',
 						'description' => 'CSV, list of hosts to exclude downloading from. Can use a wildcard, e.g. to cover a host and all its subdomains, use these two values `google.com,*.google.com`, or for multiple domain extensions use `www.google.*`, or can even use `*.google.*` for all subdomains and all domain extensions.',
@@ -273,6 +280,13 @@ class Downloader {
 						'type'        => 'flag',
 						'name'        => 'do-not-download-protocol-relative-urls',
 						'description' => 'Unless this flag is set, the command will automatically download protocol-relative image URLs (e.g. `//cdn.host.com/img.jpg`) by prepending https: to them.',
+						'optional'    => true,
+						'repeating'   => false,
+					],
+					[
+						'type'        => 'flag',
+						'name'        => 'replace',
+						'description' => 'Replace URLs in post content (use --no-replace to skip replacements).',
 						'optional'    => true,
 						'repeating'   => false,
 					],
@@ -470,6 +484,7 @@ class Downloader {
 		$do_not_download_large_sizes            = isset( $assoc_args['do-not-download-large-sizes'] ) ? true : false;
 		$do_not_download_root_relative_urls     = isset( $assoc_args['do-not-download-root-relative-urls'] ) ? true : false;
 		$do_not_download_protocol_relative_urls = isset( $assoc_args['do-not-download-protocol-relative-urls'] ) ? true : false;
+		$replace                                = array_key_exists( 'replace', $assoc_args ) ? (bool) $assoc_args['replace'] : true;
 		$post_types                             = isset( $assoc_args['post-types'] ) ? explode( ',', $assoc_args['post-types'] ) : [ 'post', 'page' ];
 		$post_statuses                          = isset( $assoc_args['post-statuses'] ) ? explode( ',', $assoc_args['post-statuses'] ) : [ 'publish' ];
 		$post_ids_specific                      = isset( $assoc_args['post-ids-csv'] ) ? explode( ',', $assoc_args['post-ids-csv'] ) : null;
@@ -819,7 +834,7 @@ class Downloader {
 				}
 
 				// Replace URL $src with $src_local.
-				if ( $src_local ) {
+				if ( $src_local && $replace ) {
 					$this->log(
 						self::LOG_OUTPUTS['CLI_AND_FILE'],
 						LogLevel::DEBUG,
@@ -835,7 +850,7 @@ class Downloader {
 
 					// Remove srcset/data-srcset and add wp-image-{id} class (which enables WP srcset regeneration).
 					$post_content_updated = $this->update_img_tag_for_new_attachment( $post_content_updated, $src_local, $attachment_id );
-				} elseif ( ! $dry_run ) {
+				} elseif ( ! $dry_run && ! $src_local ) {
 					// If no version of the image was imported or downloaded, log an error.
 					$this->log(
 						self::LOG_OUTPUTS['CLI_AND_FILE'],
@@ -850,10 +865,10 @@ class Downloader {
 			}
 
 			// Update the Post content.
-			if ( ! $dry_run && $post_content_updated != $post_content ) {
+			if ( ! $dry_run && $replace && $post_content_updated != $post_content ) {
 				$wpdb->update( $wpdb->prefix . 'posts', [ 'post_content' => $post_content_updated ], [ 'ID' => $post_id ] ); // phpcs:ignore -- WordPress.DB.DirectDatabaseQuery.NoCaching.
 				$this->log( self::LOG_OUTPUTS['CLI'], LogLevel::INFO, sprintf( '✓ Post content updated 👍' ), [ 'post_id' => $post_id ] );
-			} elseif ( $dry_run && $post_content_updated != $post_content ) {
+			} elseif ( $dry_run && $replace && $post_content_updated != $post_content ) {
 				$this->log( self::LOG_OUTPUTS['CLI'], LogLevel::INFO, sprintf( '✓ Post content updated 👍' ), [ 'post_id' => $post_id ] );
 			}
 		}
@@ -880,6 +895,7 @@ class Downloader {
 		$extensions                             = explode( ',', $assoc_args['extensions'] );
 		$do_not_download_root_relative_urls     = isset( $assoc_args['do-not-download-root-relative-urls'] ) ? true : false;
 		$do_not_download_protocol_relative_urls = isset( $assoc_args['do-not-download-protocol-relative-urls'] ) ? true : false;
+		$replace                                = array_key_exists( 'replace', $assoc_args ) ? (bool) $assoc_args['replace'] : true;
 		$post_types                             = isset( $assoc_args['post-types'] ) ? explode( ',', $assoc_args['post-types'] ) : [ 'post', 'page' ];
 		$post_statuses                          = isset( $assoc_args['post-statuses'] ) ? explode( ',', $assoc_args['post-statuses'] ) : [ 'publish' ];
 		$post_ids_specific                      = isset( $assoc_args['post-ids-csv'] ) ? explode( ',', $assoc_args['post-ids-csv'] ) : null;
@@ -1077,18 +1093,20 @@ class Downloader {
 				);
 
 				// Replace $url with imported URL.
-				$url_imported         = ! $dry_run ? wp_get_attachment_url( $attachment_id ) : 'dry_run';
-				$post_content_updated = str_replace( $url, $url_imported, $post_content_updated );
+				$url_imported = ! $dry_run ? wp_get_attachment_url( $attachment_id ) : 'dry_run';
+				if ( $replace ) {
+					$post_content_updated = str_replace( $url, $url_imported, $post_content_updated );
+				}
 
 				// CSV, add the imported file to the CSV file.
 				fputcsv( $csv_file_handle, [ $post_id, $url, 'success', $attachment_id, $url_imported ], ',', '"', '' ); // phpcs:ignore -- WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_fputcsv.
 			}
 
 			// Update the Post content.
-			if ( ! $dry_run && $post_content_updated != $post_content ) {
+			if ( ! $dry_run && $replace && $post_content_updated != $post_content ) {
 				$wpdb->update( $wpdb->prefix . 'posts', [ 'post_content' => $post_content_updated ], [ 'ID' => $post_id ] ); // phpcs:ignore -- WordPress.DB.DirectDatabaseQuery.NoCaching.
 				$this->log( self::LOG_OUTPUTS['CLI'], LogLevel::INFO, sprintf( '✓ Post content updated 👍' ), [ 'post_id' => $post_id ] );
-			} elseif ( $dry_run && $post_content_updated != $post_content ) {
+			} elseif ( $dry_run && $replace && $post_content_updated != $post_content ) {
 				$this->log( self::LOG_OUTPUTS['CLI'], LogLevel::INFO, sprintf( '✓ Post content updated 👍' ), [ 'post_id' => $post_id ] );
 			}
 		}
